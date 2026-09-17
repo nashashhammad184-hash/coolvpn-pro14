@@ -10,7 +10,7 @@ workflows:
         NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
     scripts:
-      - name: Audit, Configure Metro, Install and Build Android Release
+      - name: Audit, Configure Metro, Install, Prebuild and Build Android Release
         script: |
           set -e
 
@@ -33,7 +33,7 @@ workflows:
           cd "$PROJECT_DIR"
           echo "Working inside project directory: $(pwd)"
 
-          # 4. تنظيف package.json وتصحيح التبعيات المطلوبة لـ Expo و React Native
+          # 4. تنظيف package.json وتصحيح التبعيات المطلوبة
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -61,7 +61,7 @@ workflows:
             console.log("package.json audited and cleaned successfully.");
           '
 
-          # 5. ضمان وجود ملف metro.config.js مستقر ومتوافق مع المشروع
+          # 5. ضمان وجود ملف metro.config.js مستقر
           cat << 'EOF' > metro.config.js
           const { getDefaultConfig } = require('expo/metro-config');
           const config = getDefaultConfig(__dirname);
@@ -72,12 +72,16 @@ workflows:
           rm -f yarn.lock .yarnrc.yml
           npm install --legacy-peer-deps
 
-          # 7. الانتقال لمجلد الأندرويد وبناء التطبيق مع استخدام Gradle Wrapper الموجود في المشروع
+          # 7. توليد مجلد android وملفات الـ Gradle بالكامل (بما فيها gradlew المفقود) عبر Expo Prebuild
+          echo "Generating native android project structure and gradlew..."
+          npx expo prebuild --platform android --clean --no-install
+
+          # 8. الانتقال لمجلد الأندرويد المُتولّد حديثاً وبناء التطبيق
           cd android
           echo "Current Android build path: $(pwd)"
           chmod +x gradlew
 
-          # حقن إعدادات الذاكرة ومنع أي تقييد على العقدة
+          # حقن إعدادات الذاكرة
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
 
           ./gradlew clean
