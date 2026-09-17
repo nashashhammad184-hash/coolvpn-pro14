@@ -33,11 +33,18 @@ workflows:
           cd "$PROJECT_DIR"
           echo "Working inside project directory: $(pwd)"
 
-          # 4. تصحيح package.json واستبدال catalog القيم بنسخ ثابتة ومستقرة
+          # 4. تصحيح package.json والتأكد من إنشاء كائن dependencies إن لم يكن موجوداً
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
             
+            if (!pkg.dependencies) {
+              pkg.dependencies = {};
+            }
+            if (!pkg.devDependencies) {
+              pkg.devDependencies = {};
+            }
+
             if (pkg.devDependencies) {
               for (const [k, v] of Object.entries(pkg.devDependencies)) {
                 if (v === "catalog:" || (v && v.startsWith("workspace:"))) {
@@ -53,7 +60,7 @@ workflows:
               }
             }
 
-            // إضافة المكتبات التي كانت تسبب المشكلة بشكل صريح
+            // حقن المكتبات بصورة آمنة
             pkg.dependencies["@tanstack/react-query"] = "^5.60.0";
             pkg.dependencies["zod"] = "^3.24.0";
             pkg.devDependencies["@react-native/metro-config"] = "latest";
@@ -62,7 +69,7 @@ workflows:
             delete pkg.packageManager;
 
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-            console.log("package.json successfully updated with explicit dependencies.");
+            console.log("package.json successfully updated.");
           '
 
           # 5. تنظيف الذاكرة المؤقتة وملفات القفل
@@ -71,7 +78,7 @@ workflows:
           # 6. تثبيت الحزم عبر NPM
           npm install --legacy-peer-deps
 
-          # 7. التأكد الإضافي من تثبيت حزمة react-query بالذات بشكل مباشر لضمان عدم ضياعها
+          # 7. التثبيت المباشر للتأكد من وجودها
           npm install @tanstack/react-query@5.60.0 zod@3.24.0 --legacy-peer-deps
 
           # 8. توليد مجلد الأندرويد الأصلي عبر Expo Prebuild
