@@ -7,6 +7,7 @@ workflows:
         - android_credentials
       vars:
         PACKAGE_NAME: "com.coolvpn.pro"
+        NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
     scripts:
       - name: Locate, Clean, Install, Prebuild and Build Android Release
@@ -71,7 +72,7 @@ workflows:
           # 5. حذف ملفات قفل Yarn القديمة
           rm -f yarn.lock .yarnrc.yml
 
-          # 6. التثبيت باستخدام NPM
+          # 6. التثبيت باستخدام NPM مع تمرير flags لتجنب أخطاء الإصدارات
           npm install --legacy-peer-deps
 
           # 7. التأكد من وجود مجلد android و ملف gradlew، وإذا لم يوجد يتم توليده عبر Expo Prebuild
@@ -80,11 +81,15 @@ workflows:
             npx expo prebuild --platform android --no-install
           fi
 
-          # 8. الدخول لمجلد android وبناء التطبيق
+          # 8. الدخول لمجلد android وبناء التطبيق مع زيادة ذاكرة Java و Node
           cd android
           echo "Building from path: $(pwd)"
           chmod +x gradlew
-          ./gradlew assembleRelease bundleRelease
+          
+          # إضافة إعدادات الذاكرة مباشرة لملف gradle.properties لضمان عدم حدوث انهيار في الحزم
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
+
+          ./gradlew assembleRelease bundleRelease --no-daemon
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
       - "**/android/app/build/outputs/bundle/release/*.aab"
