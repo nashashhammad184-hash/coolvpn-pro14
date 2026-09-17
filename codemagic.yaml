@@ -13,53 +13,50 @@ workflows:
         script: |
           set -e
 
-          # 1. Isolate Yarn Berry workspace traversal from parent /Users/builder directory
-          echo "{}" > /Users/builder/package.json
-          echo "workspaces: []" > /Users/builder/yarn.yml
+          # 1. Clean up any accidental package.json/yarn.yml created at home/builder root
+          rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
           # 2. Inspect the repository root contents
           echo "Repository root contents:"
           ls -la
 
-          # 3. Check for the exact ZIP file name found in the repository logs
+          # 3. Extract the ZIP archive if present
           ZIP_NAME="coolvpn-hammad-pro-project-github-actions.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
             unzip -q "$ZIP_NAME"
-          else
-            # Fallback pattern search for any zip file
-            ANY_ZIP=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-            if [ -n "$ANY_ZIP" ]; then
-              echo "Extracting found archive: $ANY_ZIP"
-              unzip -q "$ANY_ZIP"
-            else
-              echo "No ZIP archive found. Checking if files are already unzipped..."
-            fi
           fi
 
-          # 4. Locate the actual project folder containing package.json
-          PROJECT_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+          # 4. Find the mobile project directory containing app.json or the android folder (avoiding api-server)
+          PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+          if [ -z "$PROJECT_DIR" ]; then
+            PROJECT_DIR=$(find . -name "android" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+          fi
+
           if [ -n "$PROJECT_DIR" ]; then
-            echo "Located project inside directory: $PROJECT_DIR"
+            echo "Located mobile project inside directory: $PROJECT_DIR"
             cd "$PROJECT_DIR"
           else
-            echo "Error: Could not find any package.json in the repository workspace!"
+            echo "Error: Could not find mobile project directory!"
             exit 1
           fi
 
           echo "Current working directory: $(pwd)"
           ls -la
 
-          # 5. Enable Corepack & Setup Yarn Berry (v4)
+          # 5. Fix Yarn Berry workspace isolation: create an empty yarn.lock in this standalone folder
+          touch yarn.lock
+
+          # 6. Enable Corepack & Setup Yarn Berry (v4)
           corepack enable
           corepack prepare yarn@4.6.0 --activate
           yarn set version 4.6.0
           yarn --version
 
-          # 6. Install dependencies using Yarn Berry
+          # 7. Install dependencies using Yarn Berry
           yarn install
 
-          # 7. Build Release APK and AAB bundles
+          # 8. Build Release APK and AAB bundles
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
