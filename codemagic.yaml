@@ -9,21 +9,21 @@ workflows:
         PACKAGE_NAME: "com.coolvpn.pro"
       node: v22.14.0
     scripts:
-      - name: Locate, Patch, Install and Build Android Release
+      - name: Locate, Clean, Install via NPM and Build Android Release
         script: |
           set -e
 
-          # 1. Clean up any accidental files at builder root
+          # 1. تنظيف أي مخلفات قديمة في الجذر
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
-          # 2. Extract ZIP archive if present
+          # 2. فك ضغط ملف المشروع إذا وجد
           ZIP_NAME="coolvpn-hammad-pro-project-github-actions.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
             unzip -q "$ZIP_NAME"
           fi
 
-          # 3. Locate mobile project directory containing app.json
+          # 3. العثور على مجلد المشروع الرئيسي الذي يحتوي على app.json
           PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
           if [ -z "$PROJECT_DIR" ]; then
             PROJECT_DIR=$(find . -name "android" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
@@ -39,55 +39,43 @@ workflows:
 
           echo "Current working directory: $(pwd)"
 
-          # 4. Patch package.json to remove catalog:/workspace: protocols, clean up internal workspace fields, and add required peer dependencies
+          # 4. تعديل package.json لتنظيفه تماماً من تبعات workspace و catalog المعقدة
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
             
+            // إزالة الـ catalog والمكتبات المحلية التابعة للـ workspace
             if (pkg.devDependencies) {
               for (const [k, v] of Object.entries(pkg.devDependencies)) {
-                if (v === "catalog:") {
-                  if (k === "@tanstack/react-query") pkg.devDependencies[k] = "^5.60.0";
-                  else if (k === "zod") pkg.devDependencies[k] = "^3.24.0";
-                  else pkg.devDependencies[k] = "latest";
-                } else if (v && v.startsWith("workspace:")) {
+                if (v === "catalog:" || (v && v.startsWith("workspace:"))) {
                   delete pkg.devDependencies[k];
                 }
               }
             }
-            
             if (pkg.dependencies) {
               for (const [k, v] of Object.entries(pkg.dependencies)) {
-                if (v === "catalog:") {
-                  pkg.dependencies[k] = "latest";
-                } else if (v && v.startsWith("workspace:")) {
+                if (v === "catalog:" || (v && v.startsWith("workspace:"))) {
                   delete pkg.dependencies[k];
                 }
               }
             }
 
+            // إضافة حزم التشغيل الأساسية لـ Expo والـ Metro
             pkg.devDependencies["@react-native/metro-config"] = "latest";
             delete pkg.workspaces;
+            delete pkg.packageManager; // إلغاء ربط Yarn الإجباري
 
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-            console.log("Successfully patched package.json");
+            console.log("Successfully cleaned package.json for NPM");
           '
 
-          # 5. Initialize clean Yarn Berry configuration using standard nodeLinker
+          # 5. حذف ملفات قفل Yarn القديمة بالكامل لضمان عدم حدوث تضارب
           rm -f yarn.lock .yarnrc.yml
-          cat << 'EOF' > .yarnrc.yml
-          nodeLinker: node-modules
-          EOF
 
-          corepack enable
-          corepack prepare yarn@4.6.0 --activate
-          yarn set version 4.6.0
-          yarn --version
+          # 6. التثبيت باستخدام NPM (الخيار الأثبت والأسرع لمشاريع React Native في CI)
+          npm install --legacy-peer-deps
 
-          # 6. Install dependencies using standard vanilla yarn install without invalid flags
-          yarn install
-
-          # 7. Build Release APK and AAB bundles
+          # 7. الانتقال لمجلد Android وبناء ملفات الـ APK و AAB النهائية
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
