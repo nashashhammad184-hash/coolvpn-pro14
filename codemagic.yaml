@@ -9,25 +9,21 @@ workflows:
         PACKAGE_NAME: "com.coolvpn.pro"
       node: v22.14.0
     scripts:
-      - name: Locate, Configure, Install and Build Android Release
+      - name: Locate, Patch, Install and Build Android Release
         script: |
           set -e
 
-          # 1. Clean up any accidental package.json/yarn.yml created at home/builder root
+          # 1. Clean up any accidental files at builder root
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
-          # 2. Inspect the repository root contents
-          echo "Repository root contents:"
-          ls -la
-
-          # 3. Extract the ZIP archive if present
+          # 2. Extract ZIP archive if present
           ZIP_NAME="coolvpn-hammad-pro-project-github-actions.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
             unzip -q "$ZIP_NAME"
           fi
 
-          # 4. Find the mobile project directory containing app.json or the android folder (avoiding api-server)
+          # 3. Locate mobile project directory containing app.json
           PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
           if [ -z "$PROJECT_DIR" ]; then
             PROJECT_DIR=$(find . -name "android" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
@@ -42,21 +38,43 @@ workflows:
           fi
 
           echo "Current working directory: $(pwd)"
-          ls -la
 
-          # 5. Fix Yarn Berry workspace isolation: create an empty yarn.lock in this standalone folder
+          # 4. CRITICAL FIX: Replace the incompatible Yarn Berry "catalog:" protocol dependencies
+          # in package.json with exact standard version strings so Yarn 4.6.0 resolves successfully.
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            if (pkg.devDependencies) {
+              for (const [k, v] of Object.entries(pkg.devDependencies)) {
+                if (v === "catalog:") {
+                  if (k === "@tanstack/react-query") pkg.devDependencies[k] = "^5.60.0";
+                  else if (k === "zod") pkg.devDependencies[k] = "^3.24.0";
+                  else pkg.devDependencies[k] = "latest";
+                }
+              }
+            }
+            if (pkg.dependencies) {
+              for (const [k, v] of Object.entries(pkg.dependencies)) {
+                if (v === "catalog:") {
+                  pkg.dependencies[k] = "latest";
+                }
+              }
+            }
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+            console.log("Successfully patched catalog: dependencies in package.json");
+          '
+
+          # 5. Initialize isolated Yarn Berry environment
           touch yarn.lock
-
-          # 6. Enable Corepack & Setup Yarn Berry (v4)
           corepack enable
           corepack prepare yarn@4.6.0 --activate
           yarn set version 4.6.0
           yarn --version
 
-          # 7. Install dependencies using Yarn Berry
+          # 6. Install dependencies smoothly
           yarn install
 
-          # 8. Build Release APK and AAB bundles
+          # 7. Build Release APK and AAB bundles
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
