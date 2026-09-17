@@ -1,7 +1,6 @@
 workflows:
-  react-native-android:
-    name: React Native Android Build
-    max_build_duration: 60
+  android-release:
+    name: Android Release Workflow
     instance_type: mac_mini_m1
     environment:
       node: 20
@@ -9,27 +8,33 @@ workflows:
       events:
         - push
     scripts:
+      - name: Configure Root Workspace Isolator
+        script: |
+          # حيلة العزل البرمجي لمنع تعارض Yarn Berry الخارجي
+          echo "{}" > /Users/builder/package.json
+          touch /Users/builder/yarn.lock
       - name: Extract Project ZIP
         script: |
-          # فك ضغط الملف المضغوط إلى مجلد فرعي نظيف
-          unzip "*.zip"
-          ls -la
+          ZIP_NAME="coolvpn hammad pro project git.zip"
+          if [ -f "$ZIP_NAME" ]; then
+            echo "Extracting $ZIP_NAME..."
+            unzip -q "$ZIP_NAME"
+          else
+            echo "Error: $ZIP_NAME not found!"
+            exit 1
+          fi
       - name: Install dependencies
         script: |
-          # العثور على اسم المجلد المستخرج تلقائياً
-          TARGET_DIR=$(find . -maxdepth 1 -type d ! -name "." ! -name ".*" | head -n 1)
-          
-          # حل مشكلة Yarn: إنشاء ملف مستقل فارغ في المجلد الخارجي لمنع التعارض
-          touch ../yarn.lock
-          
-          # الدخول لمجلد مشروعك وتفعيل التثبيت
-          cd "$TARGET_DIR"
+          # الدخول للمجلد وتفعيل Yarn وتثبيت المكتبات في خطوة واحدة متصلة
+          cd coolvpn-pro-project
           corepack enable
           yarn install
-      - name: Build Android APK and AAB
+      - name: Build Android Release Bundle & APK
         script: |
-          TARGET_DIR=$(find . -maxdepth 1 -type d ! -name "." ! -name ".*" | head -n 1)
-          cd "$TARGET_DIR/android" && ./gradlew assembleRelease bundleRelease
+          # الدخول المباشر لمجلد أندرويد وبناء التطبيق
+          cd coolvpn-pro-project/android
+          chmod +x gradlew
+          ./gradlew assembleRelease bundleRelease
     artifacts:
-      - "**/build/outputs/apk/release/*.apk"
-      - "**/build/outputs/bundle/release/*.aab"
+      - coolvpn-pro-project/android/app/build/outputs/apk/release/*.apk
+      - coolvpn-pro-project/android/app/build/outputs/bundle/release/*.aab
