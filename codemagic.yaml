@@ -9,7 +9,7 @@ workflows:
         PACKAGE_NAME: "com.coolvpn.pro"
       node: v22.14.0
     scripts:
-      - name: Extract, Configure, Install and Build Android Release
+      - name: Locate, Configure, Install and Build Android Release
         script: |
           set -e
 
@@ -17,18 +17,34 @@ workflows:
           echo "{}" > /Users/builder/package.json
           echo "workspaces: []" > /Users/builder/yarn.yml
 
-          # 2. Locate and extract the project zip package
-          ZIP_NAME="coolvpn hammad pro project git.zip"
-          if [ -f "$ZIP_NAME" ]; then
-            echo "Extracting $ZIP_NAME..."
-            unzip -q "$ZIP_NAME"
+          # 2. Inspect the repository root to find where the project source code resides
+          echo "Repository root contents:"
+          ls -la
+
+          # Find if codemagic is running inside the clone root or if we need to locate the project folder/zip
+          if [ -d "coolvpn-pro-project" ]; then
+            echo "Found coolvpn-pro-project folder directly in repository."
+            cd coolvpn-pro-project
+          elif [ -f "coolvpn hammad pro project git.zip" ]; then
+            echo "Extracting local zip package..."
+            unzip -q "coolvpn hammad pro project git.zip"
+            cd coolvpn-pro-project
           else
-            echo "Error: $ZIP_NAME not found!"
-            exit 1
+            # Search anywhere in the workspace for the package.json file of the project
+            PROJECT_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+            if [ -n "$PROJECT_DIR" ] && [ "$PROJECT_DIR" != "." ]; then
+              echo "Located project inside: $PROJECT_DIR"
+              cd "$PROJECT_DIR"
+            else
+              echo "Error: Could not locate project directory containing package.json!"
+              exit 1
+            fi
           fi
 
-          # 3. Enter project directory and configure Yarn Berry (v4) explicitly
-          cd coolvpn-pro-project
+          echo "Current working directory: $(pwd)"
+          ls -la
+
+          # 3. Enable Corepack & Setup Yarn Berry (v4)
           corepack enable
           corepack prepare yarn@4.6.0 --activate
           yarn set version 4.6.0
@@ -37,10 +53,10 @@ workflows:
           # 4. Install dependencies using Yarn Berry
           yarn install
 
-          # 5. Build Release APK and AAB bundles from the correct relative path
+          # 5. Build Release APK and AAB bundles
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
     artifacts:
-      - coolvpn-pro-project/android/app/build/outputs/apk/release/*.apk
-      - coolvpn-pro-project/android/app/build/outputs/bundle/release/*.aab
+      - "**/android/app/build/outputs/apk/release/*.apk"
+      - "**/android/app/build/outputs/bundle/release/*.aab"
