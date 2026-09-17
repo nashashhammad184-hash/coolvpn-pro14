@@ -15,16 +15,19 @@ workflows:
           ls -la
       - name: Install dependencies
         script: |
-          # العثور تلقائياً على المجلد المستخرج والدخول إليه
+          # العثور تلقائياً على المجلد المستخرج
           TARGET_DIR=$(find . -maxdepth 1 -type d ! -name "." ! -name ".*" | head -n 1)
           cd "$TARGET_DIR"
-          npm install
+          
+          # تثبيت أداة pnpm وتفعيلها داخل الخادم السحابي
+          npm install -g pnpm
+          
+          # تثبيت الحزم والمكتبات باستخدام pnpm لتخطي خطأ catalog
+          pnpm install --no-frozen-lockfile
       - name: Build Android APK and AAB
         script: |
-          # العثور تلقائياً على مجلد أندرويد بالداخل وبناء التطبيق
           TARGET_DIR=$(find . -maxdepth 1 -type d ! -name "." ! -name ".*" | head -n 1)
           cd "$TARGET_DIR/android" && ./gradlew assembleRelease bundleRelease
     artifacts:
       - "**/build/outputs/apk/release/*.apk"
       - "**/build/outputs/bundle/release/*.aab"
-      
