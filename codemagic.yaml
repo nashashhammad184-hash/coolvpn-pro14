@@ -39,12 +39,12 @@ workflows:
 
           echo "Current working directory: $(pwd)"
 
-          # 4. CRITICAL FIX: Patch package.json to remove catalog: protocols and workspace: protocol dependencies
+          # 4. CRITICAL FIX: Patch package.json to remove catalog: / workspace: protocols 
+          # and add required peer dependencies/resolutions to satisfy Yarn Berry validation.
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
             
-            // Clean devDependencies
             if (pkg.devDependencies) {
               for (const [k, v] of Object.entries(pkg.devDependencies)) {
                 if (v === "catalog:") {
@@ -57,7 +57,6 @@ workflows:
               }
             }
             
-            // Clean dependencies
             if (pkg.dependencies) {
               for (const [k, v] of Object.entries(pkg.dependencies)) {
                 if (v === "catalog:") {
@@ -68,20 +67,22 @@ workflows:
               }
             }
 
-            // Remove workspaces field if present to disable monorepo multi-package checking
+            // Ensure missing peer/metro config is supplied
+            pkg.devDependencies["@react-native/metro-config"] = "latest";
             delete pkg.workspaces;
 
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-            console.log("Successfully patched package.json (removed workspace: and catalog: dependencies)");
+            console.log("Successfully patched package.json");
           '
 
-          # 5. Initialize isolated Yarn Berry environment & disable strict workspace checking
-          touch yarn.lock
-          
-          # Create a local .yarnrc.yml to prevent workspace-related resolution errors
+          # 5. Initialize isolated Yarn Berry configuration with relaxed constraints
+          rm -f yarn.lock
           cat << 'EOF' > .yarnrc.yml
           enableGlobalCache: true
           nodeLinker: node-modules
+          immutableInstall: false
+          unsafeHttpWhitelist: []
+          constraints: false
           EOF
 
           corepack enable
@@ -89,8 +90,8 @@ workflows:
           yarn set version 4.6.0
           yarn --version
 
-          # 6. Install dependencies using standard node-modules linker
-          yarn install
+          # 6. Install dependencies and permit automatic lockfile updates
+          yarn install --mode update-lockfile
 
           # 7. Build Release APK and AAB bundles
           cd android
