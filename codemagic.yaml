@@ -11,23 +11,20 @@ workflows:
     scripts:
       - name: Extract Project ZIP
         script: |
-          unzip "*.zip"
+          # فك ضغط محتويات الـ ZIP مباشرة في المجلد الحالي دون مجلد فرعي تداخلي
+          unzip -j "*.zip" -d . || unzip "*.zip"
+          
+          # تأكيد وجود ملف الحزم في المجلد الرئيسي
           ls -la
       - name: Install dependencies
         script: |
-          # العثور تلقائياً على مجلد المشروع
-          TARGET_DIR=$(find . -maxdepth 1 -type d ! -name "." ! -name ".*" | head -n 1)
-          cd "$TARGET_DIR"
-          
-          # تفعيل الإصدار الصحيح من Yarn المتوافق مع تطبيقك
+          # تفعيل Yarn وتثبيت المكتبات مباشرة من الجذر
           corepack enable
-          
-          # تثبيت المكتبات باستخدام Yarn كما يشترط المشروع تماماً
           yarn install
       - name: Build Android APK and AAB
         script: |
-          TARGET_DIR=$(find . -maxdepth 1 -type d ! -name "." ! -name ".*" | head -n 1)
-          cd "$TARGET_DIR/android" && ./gradlew assembleRelease bundleRelease
+          # الدخول لمجلد الأندرويد الرئيسي وبناء التطبيق
+          cd android && ./gradlew assembleRelease bundleRelease
     artifacts:
       - "**/build/outputs/apk/release/*.apk"
       - "**/build/outputs/bundle/release/*.aab"
