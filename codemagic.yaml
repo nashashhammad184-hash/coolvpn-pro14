@@ -11,13 +11,18 @@ workflows:
       node: v22.14.0
       java: 17
     scripts:
-      - name: Force Java 17, Clean, Install and Build Android Release
+      - name: Clean, Install and Build Android Release with Java 17
         script: |
           set -e
 
-          # 1. التأكد من تفعيل جافا 17 المطلوبة لمكتبة OpenVPN الأصلية
-          echo "Setting Java 17 environment..."
-          export JAVA_HOME=$(echo $HOME/.asdf/installs/java/openjdk-17* || echo /Library/Java/JavaVirtualMachines/temurin-17*.jdk/Contents/Home)
+          # 1. تفعيل جافا 17 بالشكل الصحيح على ماك في Codemagic
+          echo "Configuring Java 17 environment..."
+          if [ -d "/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home" ]; then
+            export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home"
+          elif [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
+            export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+          fi
+          export PATH=$JAVA_HOME/bin:$PATH
           java -version
 
           # 2. تنظيف بيئة الجذر
@@ -84,7 +89,7 @@ workflows:
           # 8. توليد هيكلة الأندرويد الأصلية نظيفة
           npx expo prebuild --platform android --clean --no-install
 
-          # 9. الدخول إلى مجلد الأندرويد وبناء التطبيق مع بيئة جافا 17 الصارمة
+          # 9. الدخول إلى مجلد الأندرويد وبناء التطبيق
           cd android
           echo "Current Android build path: $(pwd)"
           chmod +x gradlew
