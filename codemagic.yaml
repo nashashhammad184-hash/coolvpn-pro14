@@ -33,7 +33,7 @@ workflows:
           cd "$PROJECT_DIR"
           echo "Working inside project directory: $(pwd)"
 
-          # 4. تصحيح package.json والتأكد من إنشاء كائن dependencies إن لم يكن موجوداً
+          # 4. تصحيح package.json والتأكد من توافر الكائنات الأساسية
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -60,9 +60,9 @@ workflows:
               }
             }
 
-            // حقن المكتبات بصورة آمنة
-            pkg.dependencies["@tanstack/react-query"] = "^5.60.0";
-            pkg.dependencies["zod"] = "^3.24.0";
+            // استخدام latest لتجنب أي مشاكل في توافر الإصدارات في الـ registry
+            pkg.dependencies["@tanstack/react-query"] = "latest";
+            pkg.dependencies["zod"] = "latest";
             pkg.devDependencies["@react-native/metro-config"] = "latest";
             
             delete pkg.workspaces;
@@ -75,11 +75,11 @@ workflows:
           # 5. تنظيف الذاكرة المؤقتة وملفات القفل
           rm -rf .expo node_modules yarn.lock .yarnrc.yml package-lock.json
 
-          # 6. تثبيت الحزم عبر NPM
+          # 6. تثبيت الحزم عبر NPM مع السماح بالـ legacy
           npm install --legacy-peer-deps
 
-          # 7. التثبيت المباشر للتأكد من وجودها
-          npm install @tanstack/react-query@5.60.0 zod@3.24.0 --legacy-peer-deps
+          # 7. التأكد من تثبيت الحزم المتضررة بالاصدار الأحدث مباشرة من الـ npm registry
+          npm install @tanstack/react-query@latest zod@latest --legacy-peer-deps
 
           # 8. توليد مجلد الأندرويد الأصلي عبر Expo Prebuild
           npx expo prebuild --platform android --clean --no-install
