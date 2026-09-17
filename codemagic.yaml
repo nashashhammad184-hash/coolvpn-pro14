@@ -10,7 +10,7 @@ workflows:
         NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
     scripts:
-      - name: Audit, Configure Metro, Install, Prebuild and Build Android Release
+      - name: Ultimate Expo Export and Android Release Build
         script: |
           set -e
 
@@ -24,7 +24,7 @@ workflows:
             unzip -q "$ZIP_NAME"
           fi
 
-          # 3. تحديد مجلد الموبايل الأساسي (coolvpn-pro-project) وتخطي api-server
+          # 3. تحديد مجلد الموبايل الأساسي وتخطي api-server
           PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
           if [ -z "$PROJECT_DIR" ]; then
             PROJECT_DIR="coolvpn-pro-project"
@@ -33,7 +33,7 @@ workflows:
           cd "$PROJECT_DIR"
           echo "Working inside project directory: $(pwd)"
 
-          # 4. تنظيف package.json وتصحيح التبعيات المطلوبة
+          # 4. تنظيف package.json وتصحيح التبعيات
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -61,31 +61,39 @@ workflows:
             console.log("package.json audited and cleaned successfully.");
           '
 
-          # 5. ضمان وجود ملف metro.config.js مستقر
-          cat << 'EOF' > metro.config.js
-          const { getDefaultConfig } = require('expo/metro-config');
-          const config = getDefaultConfig(__dirname);
-          module.exports = config;
-          EOF
+          # 5. تنظيف الذاكرة المؤقتة وقفل الحزم القديم
+          rm -rf .expo node_modules yarn.lock .yarnrc.yml
 
-          # 6. حذف ملفات القفل القديمة والتثبيت النظيف عبر npm
-          rm -f yarn.lock .yarnrc.yml
+          # 6. تثبيت الحزم نظيفة
           npm install --legacy-peer-deps
 
-          # 7. توليد مجلد android وملفات الـ Gradle بالكامل (بما فيها gradlew المفقود) عبر Expo Prebuild
-          echo "Generating native android project structure and gradlew..."
+          # 7. توليد مجلد الأندرويد الأصلي عبر Expo Prebuild
           npx expo prebuild --platform android --clean --no-install
 
-          # 8. الانتقال لمجلد الأندرويد المُتولّد حديثاً وبناء التطبيق
+          # 8. الخطوة الحاسمة: تصدير الـ JS Bundle والأصول مسبقاً بالمسار الصحيح الذي ينتظره Gradle
+          echo "Exporting production JS bundle manually..."
+          mkdir -p android/app/src/main/assets android/app/src/main/res
+          npx expo export --platform android --dev false --output-dir dist-export
+          
+          # نسخ حزمة الـ JS الناتجة إلى مجلد الأصول الخاص بأندرويد
+          if [ -f "dist-export/_expo/static/js/android/index-*.js" ]; then
+            cp dist-export/_expo/static/js/android/index-*.js android/app/src/main/assets/index.android.bundle
+          elif [ -f "dist-export/index.android.bundle" ]; then
+            cp dist-export/index.android.bundle android/app/src/main/assets/index.android.bundle
+          else
+            # مسار بديل للتصدير المباشر
+            npx react-native bundle --platform android --dev false --entry-file node_modules/expo-router/entry.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+          fi
+
+          # 9. الدخول إلى مجلد android وبناء ملفات الـ Release مع تجاوز مهام التجميع التلقائي للفاشل منها
           cd android
           echo "Current Android build path: $(pwd)"
           chmod +x gradlew
 
-          # حقن إعدادات الذاكرة
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
 
           ./gradlew clean
-          ./gradlew assembleRelease bundleRelease --no-daemon
+          ./gradlew assembleRelease bundleRelease --no-daemon -x bundleReleaseJsAndAssets
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
       - "**/android/app/build/outputs/bundle/release/*.aab"
