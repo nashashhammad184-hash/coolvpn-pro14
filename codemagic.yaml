@@ -1,0 +1,29 @@
+workflows:
+  react-native-android:
+    name: React Native Android Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      node: 20
+    triggering:
+      events:
+        - push
+    scripts:
+      - name: Extract Project ZIP
+        script: |
+          # فك ضغط الملف الخاص بك تلقائياً داخل الخادم السحابي
+          unzip "coolvpn hammad pro project git.zip"
+          # استعراض المجلدات الناتجة للتأكد من المسار
+          ls -la
+      - name: Install dependencies
+        script: |
+          # الدخول للمجلد المستخرج وتثبيت مكتبات التطبيق
+          cd coolvpn-pro-project && npm install
+      - name: Build Android APK and AAB
+        script: |
+          # الدخول لمجلد الأندرويد وتجميع التطبيق بصيغة إصدار نهائي للرفع
+          cd coolvpn-pro-project/android && ./gradlew assembleRelease bundleRelease
+    artifacts:
+      - coolvpn-pro-project/android/app/build/outputs/apk/release/*.apk
+      - coolvpn-pro-project/android/app/build/outputs/bundle/release/*.aab
+      
