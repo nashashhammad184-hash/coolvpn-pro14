@@ -10,11 +10,11 @@ workflows:
         NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
     scripts:
-      - name: Clean, Install, Prebuild and Build Android Release
+      - name: Robust Install, Manual Bundle and Android Build
         script: |
           set -e
 
-          # 1. تنظيف الملفات الجذرية القديمة
+          # 1. تنظيف الجذر
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
           # 2. فك ضغط المشروع
@@ -78,7 +78,17 @@ workflows:
           # 7. توليد هيكلة الأندرويد الأصلية نظيفة
           npx expo prebuild --platform android --clean --no-install
 
-          # 8. الدخول لمجلد الأندرويد وبناء التطبيق مع تخطي حزمة الـ JS التلقائية إذا فشلت وتوجيهها
+          # 8. الحل الجذري: بناء ملف الـ JavaScript Bundle يدوياً عبر العقدة لمنع فشل Gradle الداخلي
+          echo "Building React Native JS bundle manually..."
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file node_modules/expo-router/entry.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+
+          # 9. الدخول لمجلد الأندرويد وتخطي مهام الـ bundle التلقائية أثناء تجميع Gradle
           cd android
           echo "Building from path: $(pwd)"
           chmod +x gradlew
@@ -86,9 +96,7 @@ workflows:
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
 
           ./gradlew clean
-          
-          # محاولة البناء مع تجاوز فحص الـ bundle اليدوي إذا حدث خطأ في عقدة الـ node
-          ./gradlew assembleRelease bundleRelease --no-daemon -x bundleReleaseJsAndAssets || ./gradlew assembleRelease bundleRelease --no-daemon
+          ./gradlew assembleRelease bundleRelease --no-daemon -x bundleReleaseJsAndAssets
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
       - "**/android/app/build/outputs/bundle/release/*.aab"
