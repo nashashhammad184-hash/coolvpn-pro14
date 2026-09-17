@@ -11,31 +11,29 @@ workflows:
       node: v22.14.0
       java: 17
     scripts:
-      - name: Clean, Install and Build Android Release with Java 17
+      - name: Clean, Install, Prebuild and Build Android Release with Debug Info
         script: |
           set -e
 
-          # 1. تفعيل جافا 17 بالشكل الصحيح على ماك في Codemagic
-          echo "Configuring Java 17 environment..."
+          # 1. تكوين بيئة جافا 17
           if [ -d "/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home" ]; then
             export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home"
           elif [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
             export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
           fi
           export PATH=$JAVA_HOME/bin:$PATH
-          java -version
 
-          # 2. تنظيف بيئة الجذر
+          # 2. تنظيف الجذر
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
-          # 3. فك ضغط الأرشيف بدقة
+          # 3. فك ضغط الأرشيف
           ZIP_NAME="coolvpn-hammad-pro-project-github-actions.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
             unzip -q "$ZIP_NAME"
           fi
 
-          # 4. تحديد مجلد الموبايل الأساسي وتخطي api-server
+          # 4. تحديد مجلد المشروع الأساسي
           PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
           if [ -z "$PROJECT_DIR" ]; then
             PROJECT_DIR="coolvpn-pro-project"
@@ -44,7 +42,7 @@ workflows:
           cd "$PROJECT_DIR"
           echo "Working inside project directory: $(pwd)"
 
-          # 5. تنظيف وتصحيح package.json
+          # 5. تصحيح package.json
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -79,17 +77,21 @@ workflows:
             console.log("package.json successfully updated.");
           '
 
-          # 6. تنظيف ملفات القفل والذاكرة المؤقتة
+          # 6. تنظيف الملفات المؤقتة
           rm -rf .expo node_modules yarn.lock .yarnrc.yml package-lock.json
 
-          # 7. تثبيت الحزم النظيفة
+          # 7. التثبيت عبر NPM
           npm install --legacy-peer-deps
           npm install @tanstack/react-query@latest zod@latest @react-native-community/cli@latest --legacy-peer-deps
 
-          # 8. توليد هيكلة الأندرويد الأصلية نظيفة
+          # 8. توليد هيكلة الأندرويد نظيفة
           npx expo prebuild --platform android --clean --no-install
 
-          # 9. الدخول إلى مجلد الأندرويد وبناء التطبيق
+          # 9. تجميع الـ JS Bundle مسبقاً يدوياً لمعرفة إذا كان هناك أي خطأ في الكود أو الـ Metro
+          echo "Running manual bundle check..."
+          npx react-native bundle --platform android --dev false --entry-file node_modules/expo-router/entry.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res || true
+
+          # 10. الانتقال لـ android وبناء التطبيق مع طباعة معلومات الـ stacktrace في حال حدوث أي خطأ
           cd android
           echo "Current Android build path: $(pwd)"
           chmod +x gradlew
@@ -97,7 +99,7 @@ workflows:
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
 
           ./gradlew clean
-          ./gradlew assembleRelease bundleRelease --no-daemon
+          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace --info
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
       - "**/android/app/build/outputs/bundle/release/*.aab"
