@@ -1,20 +1,25 @@
 workflows:
   android-release:
     name: Android Release Workflow
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     environment:
-      node: 20
-    triggering:
-      events:
-        - push
+      groups:
+        - android_credentials
+      vars:
+        PACKAGE_NAME: "com.coolvpn.pro"
+      node: v22.14.0
+      yarn: 4.6.0
     scripts:
       - name: Configure Root Workspace Isolator
         script: |
-          # حيلة العزل البرمجي لمنع تعارض Yarn Berry الخارجي
+          # Prevent Yarn Berry from traversing upwards to /Users/builder
           echo "{}" > /Users/builder/package.json
-          touch /Users/builder/yarn.lock
+          echo "workspaces: []" > /Users/builder/yarn.yml
       - name: Extract Project ZIP
         script: |
+          echo "Listing repository contents:"
+          ls -la
+          
           ZIP_NAME="coolvpn hammad pro project git.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
@@ -23,18 +28,36 @@ workflows:
             echo "Error: $ZIP_NAME not found!"
             exit 1
           fi
-      - name: Install dependencies
+          
+          if [ -d "coolvpn-pro-project" ]; then
+            cd coolvpn-pro-project
+            echo "Current working directory: $(pwd)"
+          else
+            echo "Error: coolvpn-pro-project directory missing after extraction."
+            exit 1
+          fi
+      - name: Enable Corepack and Setup Yarn
         script: |
-          # الدخول للمجلد وتفعيل Yarn وتثبيت المكتبات في خطوة واحدة متصلة
           cd coolvpn-pro-project
           corepack enable
+          corepack prepare yarn@4.6.0 --activate
+          yarn --version
+      - name: Install dependencies
+        script: |
+          cd coolvpn-pro-project
           yarn install
       - name: Build Android Release Bundle & APK
         script: |
-          # الدخول المباشر لمجلد أندرويد وبناء التطبيق
           cd coolvpn-pro-project/android
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
     artifacts:
       - coolvpn-pro-project/android/app/build/outputs/apk/release/*.apk
       - coolvpn-pro-project/android/app/build/outputs/bundle/release/*.aab
+    publishing:
+      email:
+        recipients:
+          - hammad.dev@workspace.local
+        notify:
+          success: true
+          failure: true
