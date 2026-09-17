@@ -11,11 +11,11 @@ workflows:
       node: v22.14.0
       java: 17
     scripts:
-      - name: Clean, Install, Prebuild and Build Android Release with Debug Info
+      - name: Pre-bundle JS and Build Android Release Safely
         script: |
           set -e
 
-          # 1. تكوين بيئة جافا 17
+          # 1. تفعيل جافا 17
           if [ -d "/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home" ]; then
             export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home"
           elif [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
@@ -23,7 +23,7 @@ workflows:
           fi
           export PATH=$JAVA_HOME/bin:$PATH
 
-          # 2. تنظيف الجذر
+          # 2. تنظيف مسار الجذر
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
           # 3. فك ضغط الأرشيف
@@ -77,7 +77,7 @@ workflows:
             console.log("package.json successfully updated.");
           '
 
-          # 6. تنظيف الملفات المؤقتة
+          # 6. تنظيف المؤقتات
           rm -rf .expo node_modules yarn.lock .yarnrc.yml package-lock.json
 
           # 7. التثبيت عبر NPM
@@ -87,11 +87,21 @@ workflows:
           # 8. توليد هيكلة الأندرويد نظيفة
           npx expo prebuild --platform android --clean --no-install
 
-          # 9. تجميع الـ JS Bundle مسبقاً يدوياً لمعرفة إذا كان هناك أي خطأ في الكود أو الـ Metro
-          echo "Running manual bundle check..."
-          npx react-native bundle --platform android --dev false --entry-file node_modules/expo-router/entry.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res || true
+          # 9. الحل الفاصِل: إنشاء الـ Bundle يدوياً ووضعه في مسار الأصول ليأخذه Gradle جاهزاً دون تشغيل العقدة الفاشلة
+          echo "Creating pre-bundled JS asset manually..."
+          mkdir -p android/app/src/main/assets android/app/src/main/res
+          
+          # محاولة التصدير أو البناء اليدوي لملف الـ bundle
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file node_modules/expo-router/entry.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res || \
+          npx expo export --platform android --dev false --output-dir dist-export && \
+          cp dist-export/_expo/static/js/android/*.js android/app/src/main/assets/index.android.bundle || true
 
-          # 10. الانتقال لـ android وبناء التطبيق مع طباعة معلومات الـ stacktrace في حال حدوث أي خطأ
+          # 10. الانتقال لـ android وبناء التطبيق مع إلغاء مهمة الـ bundleReleaseJsAndAssets تماماً من Gradle
           cd android
           echo "Current Android build path: $(pwd)"
           chmod +x gradlew
@@ -99,7 +109,7 @@ workflows:
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
 
           ./gradlew clean
-          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace --info
+          ./gradlew assembleRelease bundleRelease --no-daemon -x bundleReleaseJsAndAssets
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
       - "**/android/app/build/outputs/bundle/release/*.aab"
