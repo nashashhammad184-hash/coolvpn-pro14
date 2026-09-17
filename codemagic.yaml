@@ -10,21 +10,21 @@ workflows:
         NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
     scripts:
-      - name: Locate, Clean, Install, Prebuild and Build Android Release
+      - name: Clean, Install, Prebuild and Build Android Release
         script: |
           set -e
 
-          # 1. تنظيف أي مخلفات قديمة في الجذر
+          # 1. تنظيف أي ملفات جذرية قديمة
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
-          # 2. فك ضغط ملف المشروع إذا وجد
+          # 2. فك ضغط المشروع
           ZIP_NAME="coolvpn-hammad-pro-project-github-actions.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
             unzip -q "$ZIP_NAME"
           fi
 
-          # 3. العثور حصرياً على مجلد الموبايل الذي يحتوي على app.json
+          # 3. العثور على مجلد الموبايل الصحيح (متخطياً api-server)
           PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
           
           if [ -z "$PROJECT_DIR" ]; then
@@ -41,7 +41,7 @@ workflows:
 
           echo "Current working directory: $(pwd)"
 
-          # 4. تعديل package.json لتنظيفه تماماً من تبعات workspace و catalog المعقدة
+          # 4. تنظيف package.json من الـ workspaces والـ catalogs غير المدعومة
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -66,29 +66,27 @@ workflows:
             delete pkg.packageManager;
 
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-            console.log("Successfully cleaned mobile package.json for NPM");
+            console.log("Successfully cleaned mobile package.json");
           '
 
-          # 5. حذف ملفات قفل Yarn القديمة
+          # 5. تنظيف ملفات الـ Lock القديمة
           rm -f yarn.lock .yarnrc.yml
 
-          # 6. التثبيت باستخدام NPM مع تمرير flags لتجنب أخطاء الإصدارات
+          # 6. تثبيت الحزم عبر NPM نظيفة بالكامل
           npm install --legacy-peer-deps
 
-          # 7. التأكد من وجود مجلد android و ملف gradlew، وإذا لم يوجد يتم توليده عبر Expo Prebuild
-          if [ ! -f "android/gradlew" ]; then
-            echo "Gradle wrapper missing. Generating native android project via Expo Prebuild..."
-            npx expo prebuild --platform android --no-install
-          fi
+          # 7. فرض إعادة توليد هيكلة الأندرويد و الـ Native Modules عبر Expo Prebuild نظيف
+          npx expo prebuild --platform android --clean --no-install
 
-          # 8. الدخول لمجلد android وبناء التطبيق مع زيادة ذاكرة Java و Node
+          # 8. الدخول لمجلد الأندرويد وتنظيف مخلفات Gradle السابقة لمنع أي أخطاء تداخل تجميعية
           cd android
           echo "Building from path: $(pwd)"
           chmod +x gradlew
           
-          # إضافة إعدادات الذاكرة مباشرة لملف gradle.properties لضمان عدم حدوث انهيار في الحزم
+          # ضبط تخصيص الذاكرة ومنع استخدام الـ daemon لمنع تعليق العقدة (node)
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
 
+          ./gradlew clean
           ./gradlew assembleRelease bundleRelease --no-daemon
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
