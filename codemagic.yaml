@@ -8,18 +8,14 @@ workflows:
       vars:
         PACKAGE_NAME: "com.coolvpn.pro"
       node: v22.14.0
-      yarn: 4.6.0
     scripts:
-      - name: Configure Root Workspace Isolator
+      - name: Extract, Configure, Install and Build Android Release
         script: |
-          # Prevent Yarn Berry from traversing upwards to /Users/builder
+          # 1. Isolate Yarn Berry workspace traversal from parent /Users/builder directory
           echo "{}" > /Users/builder/package.json
           echo "workspaces: []" > /Users/builder/yarn.yml
-      - name: Extract Project ZIP
-        script: |
-          echo "Listing repository contents:"
-          ls -la
-          
+
+          # 2. Locate and extract the project zip package
           ZIP_NAME="coolvpn hammad pro project git.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
@@ -28,36 +24,21 @@ workflows:
             echo "Error: $ZIP_NAME not found!"
             exit 1
           fi
-          
-          if [ -d "coolvpn-pro-project" ]; then
-            cd coolvpn-pro-project
-            echo "Current working directory: $(pwd)"
-          else
-            echo "Error: coolvpn-pro-project directory missing after extraction."
-            exit 1
-          fi
-      - name: Enable Corepack and Setup Yarn
-        script: |
+
+          # 3. Enter project directory
           cd coolvpn-pro-project
+
+          # 4. Enable Corepack & Setup Yarn Berry
           corepack enable
-          corepack prepare yarn@4.6.0 --activate
           yarn --version
-      - name: Install dependencies
-        script: |
-          cd coolvpn-pro-project
+
+          # 5. Install dependencies
           yarn install
-      - name: Build Android Release Bundle & APK
-        script: |
-          cd coolvpn-pro-project/android
+
+          # 6. Build Release APK and AAB bundles
+          cd android
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
     artifacts:
       - coolvpn-pro-project/android/app/build/outputs/apk/release/*.apk
       - coolvpn-pro-project/android/app/build/outputs/bundle/release/*.aab
-    publishing:
-      email:
-        recipients:
-          - hammad.dev@workspace.local
-        notify:
-          success: true
-          failure: true
