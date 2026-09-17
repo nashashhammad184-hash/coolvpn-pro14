@@ -23,14 +23,19 @@ workflows:
             unzip -q "$ZIP_NAME"
           fi
 
-          # 3. العثور على مجلد المشروع الرئيسي الذي يحتوي على package.json
-          PROJECT_DIR=$(find . -name "package.json" -not -path "*/node_modules/*" -exec dirname {} \; | head -n 1)
+          # 3. العثور حصرياً على مجلد الموبايل الذي يحتوي على app.json (متخطياً api-server)
+          PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
+          
+          if [ -z "$PROJECT_DIR" ]; then
+            # كاحتياط، البحث عن مجلد يحتوي على مجلد فرعي اسمه android متخطياً api-server
+            PROJECT_DIR=$(find . -type d -name "android" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
+          fi
 
           if [ -n "$PROJECT_DIR" ]; then
-            echo "Located project inside directory: $PROJECT_DIR"
+            echo "Located Mobile Project inside directory: $PROJECT_DIR"
             cd "$PROJECT_DIR"
           else
-            echo "Error: Could not find project directory!"
+            echo "Error: Could not find mobile project directory!"
             exit 1
           fi
 
@@ -61,7 +66,7 @@ workflows:
             delete pkg.packageManager;
 
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-            console.log("Successfully cleaned package.json for NPM");
+            console.log("Successfully cleaned mobile package.json for NPM");
           '
 
           # 5. حذف ملفات قفل Yarn القديمة
@@ -70,16 +75,11 @@ workflows:
           # 6. التثبيت باستخدام NPM
           npm install --legacy-peer-deps
 
-          # 7. البحث بدقة عن مجلد android والانتقال إليه بغض النظر عن مكانه الحالي
-          ANDROID_PATH=$(find . -name "gradlew" -maxdepth 3 -exec dirname {} \; | head -n 1)
-          
-          if [ -n "$ANDROID_PATH" ]; then
-            echo "Found android/gradlew at: $ANDROID_PATH"
-            cd "$ANDROID_PATH"
-          elif [ -d "android" ]; then
+          # 7. الدخول لمجلد android وبناء التطبيق بنجاح
+          if [ -d "android" ]; then
             cd android
           else
-            echo "Error: android directory or gradlew not found!"
+            echo "Error: android directory not found in mobile project path!"
             exit 1
           fi
 
