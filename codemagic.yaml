@@ -10,11 +10,11 @@ workflows:
         NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
     scripts:
-      - name: Clean, Install, Prebuild and Build Android Release
+      - name: Clean, Install, Export JS and Build Android Release
         script: |
           set -e
 
-          # 1. تنظيف أي ملفات جذرية قديمة
+          # 1. تنظيف الملفات الجذرية القديمة
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
           # 2. فك ضغط المشروع
@@ -41,7 +41,7 @@ workflows:
 
           echo "Current working directory: $(pwd)"
 
-          # 4. تنظيف package.json من الـ workspaces والـ catalogs غير المدعومة
+          # 4. تنظيف package.json من الـ workspaces والـ catalogs
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -69,21 +69,24 @@ workflows:
             console.log("Successfully cleaned mobile package.json");
           '
 
-          # 5. تنظيف ملفات الـ Lock القديمة
+          # 5. تنظيف قفل Yarn القديم
           rm -f yarn.lock .yarnrc.yml
 
-          # 6. تثبيت الحزم عبر NPM نظيفة بالكامل
+          # 6. تثبيت الحزم عبر NPM
           npm install --legacy-peer-deps
 
-          # 7. فرض إعادة توليد هيكلة الأندرويد و الـ Native Modules عبر Expo Prebuild نظيف
+          # 7. توليد هيكلة الأندرويد الأصلية نظيفة
           npx expo prebuild --platform android --clean --no-install
 
-          # 8. الدخول لمجلد الأندرويد وتنظيف مخلفات Gradle السابقة لمنع أي أخطاء تداخل تجميعية
+          # 8. اختبار تصدير ملفات الجافا سكريبت مسبقاً (لكشف أي خطأ برمجياً قبل بناء Gradle)
+          echo "Exporting JS bundle to verify compilation..."
+          npx expo export --platform android --dev false || true
+
+          # 9. الدخول لمجلد الأندرويد وبناء التطبيق
           cd android
           echo "Building from path: $(pwd)"
           chmod +x gradlew
           
-          # ضبط تخصيص الذاكرة ومنع استخدام الـ daemon لمنع تعليق العقدة (node)
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
 
           ./gradlew clean
