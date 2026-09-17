@@ -39,7 +39,7 @@ workflows:
 
           echo "Current working directory: $(pwd)"
 
-          # 4. Patch package.json to remove catalog:/workspace: protocols and missing peer dependencies
+          # 4. Patch package.json to remove catalog:/workspace: protocols, clean up internal workspace fields, and add required peer dependencies
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -73,7 +73,7 @@ workflows:
             console.log("Successfully patched package.json");
           '
 
-          # 5. Initialize clean Yarn Berry config (using valid Yarn 4 settings only)
+          # 5. Initialize clean Yarn Berry configuration using standard nodeLinker
           rm -f yarn.lock .yarnrc.yml
           cat << 'EOF' > .yarnrc.yml
           nodeLinker: node-modules
@@ -84,8 +84,8 @@ workflows:
           yarn set version 4.6.0
           yarn --version
 
-          # 6. Install dependencies and permit immutable lockfile bypass via command line flag
-          yarn install --immutable=false
+          # 6. Install dependencies using standard vanilla yarn install without invalid flags
+          yarn install
 
           # 7. Build Release APK and AAB bundles
           cd android
