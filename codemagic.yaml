@@ -10,38 +10,30 @@ workflows:
         NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
     scripts:
-      - name: Robust Install, Manual Bundle and Android Build
+      - name: Audit, Configure Metro, Install and Build Android Release
         script: |
           set -e
 
-          # 1. تنظيف الجذر
+          # 1. تنظيف بيئة الجذر
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
-          # 2. فك ضغط المشروع
+          # 2. فك ضغط الأرشيف بدقة
           ZIP_NAME="coolvpn-hammad-pro-project-github-actions.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
             unzip -q "$ZIP_NAME"
           fi
 
-          # 3. العثور على مجلد الموبايل الصحيح (متخطياً api-server)
+          # 3. تحديد مجلد الموبايل الأساسي (coolvpn-pro-project) وتخطي api-server
           PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
-          
           if [ -z "$PROJECT_DIR" ]; then
-            PROJECT_DIR=$(find . -type d -name "android" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
+            PROJECT_DIR="coolvpn-pro-project"
           fi
 
-          if [ -n "$PROJECT_DIR" ]; then
-            echo "Located Mobile Project inside directory: $PROJECT_DIR"
-            cd "$PROJECT_DIR"
-          else
-            echo "Error: Could not find mobile project directory!"
-            exit 1
-          fi
+          cd "$PROJECT_DIR"
+          echo "Working inside project directory: $(pwd)"
 
-          echo "Current working directory: $(pwd)"
-
-          # 4. تنظيف package.json من الـ workspaces والـ catalogs
+          # 4. تنظيف package.json وتصحيح التبعيات المطلوبة لـ Expo و React Native
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -66,37 +58,30 @@ workflows:
             delete pkg.packageManager;
 
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
-            console.log("Successfully cleaned mobile package.json");
+            console.log("package.json audited and cleaned successfully.");
           '
 
-          # 5. تنظيف قفل Yarn القديم
-          rm -f yarn.lock .yarnrc.yml
+          # 5. ضمان وجود ملف metro.config.js مستقر ومتوافق مع المشروع
+          cat << 'EOF' > metro.config.js
+          const { getDefaultConfig } = require('expo/metro-config');
+          const config = getDefaultConfig(__dirname);
+          module.exports = config;
+          EOF
 
-          # 6. تثبيت الحزم عبر NPM
+          # 6. حذف ملفات القفل القديمة والتثبيت النظيف عبر npm
+          rm -f yarn.lock .yarnrc.yml
           npm install --legacy-peer-deps
 
-          # 7. توليد هيكلة الأندرويد الأصلية نظيفة
-          npx expo prebuild --platform android --clean --no-install
-
-          # 8. الحل الجذري: بناء ملف الـ JavaScript Bundle يدوياً عبر العقدة لمنع فشل Gradle الداخلي
-          echo "Building React Native JS bundle manually..."
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --entry-file node_modules/expo-router/entry.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res
-
-          # 9. الدخول لمجلد الأندرويد وتخطي مهام الـ bundle التلقائية أثناء تجميع Gradle
+          # 7. الانتقال لمجلد الأندرويد وبناء التطبيق مع استخدام Gradle Wrapper الموجود في المشروع
           cd android
-          echo "Building from path: $(pwd)"
+          echo "Current Android build path: $(pwd)"
           chmod +x gradlew
-          
+
+          # حقن إعدادات الذاكرة ومنع أي تقييد على العقدة
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
 
           ./gradlew clean
-          ./gradlew assembleRelease bundleRelease --no-daemon -x bundleReleaseJsAndAssets
+          ./gradlew assembleRelease bundleRelease --no-daemon
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
       - "**/android/app/build/outputs/bundle/release/*.aab"
