@@ -9,22 +9,28 @@ workflows:
         PACKAGE_NAME: "com.coolvpn.pro"
         NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
+      java: 17
     scripts:
-      - name: Ultimate Clean, Install and Expo Android Release Build
+      - name: Force Java 17, Clean, Install and Build Android Release
         script: |
           set -e
 
-          # 1. تنظيف بيئة الجذر
+          # 1. التأكد من تفعيل جافا 17 المطلوبة لمكتبة OpenVPN الأصلية
+          echo "Setting Java 17 environment..."
+          export JAVA_HOME=$(echo $HOME/.asdf/installs/java/openjdk-17* || echo /Library/Java/JavaVirtualMachines/temurin-17*.jdk/Contents/Home)
+          java -version
+
+          # 2. تنظيف بيئة الجذر
           rm -f /Users/builder/package.json /Users/builder/yarn.yml
 
-          # 2. فك ضغط الأرشيف بدقة
+          # 3. فك ضغط الأرشيف بدقة
           ZIP_NAME="coolvpn-hammad-pro-project-github-actions.zip"
           if [ -f "$ZIP_NAME" ]; then
             echo "Extracting $ZIP_NAME..."
             unzip -q "$ZIP_NAME"
           fi
 
-          # 3. تحديد مجلد الموبايل الأساسي وتخطي api-server
+          # 4. تحديد مجلد الموبايل الأساسي وتخطي api-server
           PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
           if [ -z "$PROJECT_DIR" ]; then
             PROJECT_DIR="coolvpn-pro-project"
@@ -33,7 +39,7 @@ workflows:
           cd "$PROJECT_DIR"
           echo "Working inside project directory: $(pwd)"
 
-          # 4. تنظيف وتصحيح package.json
+          # 5. تنظيف وتصحيح package.json
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -68,27 +74,25 @@ workflows:
             console.log("package.json successfully updated.");
           '
 
-          # 5. تنظيف ملفات القفل والذاكرة المؤقتة
+          # 6. تنظيف ملفات القفل والذاكرة المؤقتة
           rm -rf .expo node_modules yarn.lock .yarnrc.yml package-lock.json
 
-          # 6. تثبيت الحزم النظيفة
+          # 7. تثبيت الحزم النظيفة
           npm install --legacy-peer-deps
           npm install @tanstack/react-query@latest zod@latest @react-native-community/cli@latest --legacy-peer-deps
 
-          # 7. التوليد النظيف لهيكلة الأندرويد
+          # 8. توليد هيكلة الأندرويد الأصلية نظيفة
           npx expo prebuild --platform android --clean --no-install
 
-          # 8. الحل القاطع: استخدام أداة بناء Expo الموجهة للريليس لضمان توافقية سكريبتات Node
-          # هذا الأمر يتولى حزم الـ JS وبناء ملف الـ APK والـ AAB بشكل متكامل وآمن
-          npx expo run:android --variant release --no-bundler || true
-
-          # كخطوة تأكيدية نهائية في حال احتياج Gradle للأمر المباشر
+          # 9. الدخول إلى مجلد الأندرويد وبناء التطبيق مع بيئة جافا 17 الصارمة
           cd android
+          echo "Current Android build path: $(pwd)"
           chmod +x gradlew
+
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
-          
-          # بناء الحزم نهائياً مع تجاوز الخطأ الوهمي لتجميع الـ JS في حال تم مسبقاً
-          ./gradlew assembleRelease bundleRelease --no-daemon -x bundleReleaseJsAndAssets || ./gradlew assembleRelease bundleRelease --no-daemon
+
+          ./gradlew clean
+          ./gradlew assembleRelease bundleRelease --no-daemon
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
       - "**/android/app/build/outputs/bundle/release/*.aab"
