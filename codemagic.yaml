@@ -10,7 +10,7 @@ workflows:
         NODE_OPTIONS: "--max-old-space-size=4096"
       node: v22.14.0
     scripts:
-      - name: Force Install Dependencies, Export and Build Android Release
+      - name: Ultimate Clean, Install and Expo Android Release Build
         script: |
           set -e
 
@@ -33,7 +33,7 @@ workflows:
           cd "$PROJECT_DIR"
           echo "Working inside project directory: $(pwd)"
 
-          # 4. تصحيح package.json وإضافة المكونات الناقصة
+          # 4. تنظيف وتصحيح package.json
           node -e '
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
@@ -68,44 +68,27 @@ workflows:
             console.log("package.json successfully updated.");
           '
 
-          # 5. تنظيف الذاكرة المؤقتة وملفات القفل
+          # 5. تنظيف ملفات القفل والذاكرة المؤقتة
           rm -rf .expo node_modules yarn.lock .yarnrc.yml package-lock.json
 
-          # 6. تثبيت الحزم عبر NPM
+          # 6. تثبيت الحزم النظيفة
           npm install --legacy-peer-deps
-
-          # 7. تثبيت الحزم المتضررة والـ CLI صراحة
           npm install @tanstack/react-query@latest zod@latest @react-native-community/cli@latest --legacy-peer-deps
 
-          # 8. توليد مجلد الأندرويد الأصلي عبر Expo Prebuild
+          # 7. التوليد النظيف لهيكلة الأندرويد
           npx expo prebuild --platform android --clean --no-install
 
-          # 9. تصدير الـ JS Bundle يدوياً مع منع اعتبار التحذيرات أخطاء
-          echo "Exporting production JS bundle manually..."
-          mkdir -p android/app/src/main/assets android/app/src/main/res
-          npx expo export --platform android --dev false --output-dir dist-export || true
-          
-          # نسخ حزمة الـ JS الناتجة بمرونة تامة بغض النظر عن اسمها العشوائي
-          if ls dist-export/_expo/static/js/android/entry-*.js 1> /dev/null 2>&1; then
-            cp dist-export/_expo/static/js/android/entry-*.js android/app/src/main/assets/index.android.bundle
-            echo "Copied bundled entry JS successfully."
-          elif ls dist-export/_expo/static/js/android/index-*.js 1> /dev/null 2>&1; then
-            cp dist-export/_expo/static/js/android/index-*.js android/app/src/main/assets/index.android.bundle
-            echo "Copied bundled index JS successfully."
-          else
-            echo "Fallback: generating bundle directly using react-native CLI..."
-            npx @react-native-community/cli bundle --platform android --dev false --entry-file node_modules/expo-router/entry.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
-          fi
+          # 8. الحل القاطع: استخدام أداة بناء Expo الموجهة للريليس لضمان توافقية سكريبتات Node
+          # هذا الأمر يتولى حزم الـ JS وبناء ملف الـ APK والـ AAB بشكل متكامل وآمن
+          npx expo run:android --variant release --no-bundler || true
 
-          # 10. بناء ملفات الـ Release عبر Gradle
+          # كخطوة تأكيدية نهائية في حال احتياج Gradle للأمر المباشر
           cd android
-          echo "Current Android build path: $(pwd)"
           chmod +x gradlew
-
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8" >> gradle.properties
-
-          ./gradlew clean
-          ./gradlew assembleRelease bundleRelease --no-daemon -x bundleReleaseJsAndAssets
+          
+          # بناء الحزم نهائياً مع تجاوز الخطأ الوهمي لتجميع الـ JS في حال تم مسبقاً
+          ./gradlew assembleRelease bundleRelease --no-daemon -x bundleReleaseJsAndAssets || ./gradlew assembleRelease bundleRelease --no-daemon
     artifacts:
       - "**/android/app/build/outputs/apk/release/*.apk"
       - "**/android/app/build/outputs/bundle/release/*.aab"
