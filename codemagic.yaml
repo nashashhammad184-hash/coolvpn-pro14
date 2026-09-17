@@ -1,7 +1,7 @@
 workflows:
   android-release:
     name: Android Release Workflow
-    instance_type: mac_mini_m1
+    instance_type: mac_mini_m2
     environment:
       groups:
         - android_credentials
@@ -11,36 +11,36 @@ workflows:
     scripts:
       - name: Extract, Configure, Install and Build Android Release
         script: |
-          # 1. عزل بيئة العمل لمنع تعارض Yarn Berry الخارجي
+          set -e
+
+          # 1. Isolate Yarn Berry workspace traversal from parent /Users/builder directory
           echo "{}" > /Users/builder/package.json
           echo "workspaces: []" > /Users/builder/yarn.yml
 
-          # 2. البحث التلقائي عن ملف الـ ZIP وفك ضغطه لتفادي أخطاء المسافات
-          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
-          if [ -n "$ZIP_FILE" ]; then
-            echo "Found zip file: $ZIP_FILE. Extracting..."
-            unzip -q "$ZIP_FILE"
+          # 2. Locate and extract the project zip package
+          ZIP_NAME="coolvpn hammad pro project git.zip"
+          if [ -f "$ZIP_NAME" ]; then
+            echo "Extracting $ZIP_NAME..."
+            unzip -q "$ZIP_NAME"
           else
-            echo "Error: No .zip file found in the repository root!"
+            echo "Error: $ZIP_NAME not found!"
             exit 1
           fi
 
-          # 3. العثور التلقائي على المجلد الناتج والدخول إليه
-          TARGET_DIR=$(find . -maxdepth 1 -type d ! -name "." ! -name ".*" | head -n 1)
-          echo "Entering directory: $TARGET_DIR"
-          cd "$TARGET_DIR"
-
-          # 4. تفعيل Corepack لتشغيل Yarn Berry المخصص للمشروع
+          # 3. Enter project directory and configure Yarn Berry (v4) explicitly
+          cd coolvpn-pro-project
           corepack enable
+          corepack prepare yarn@4.6.0 --activate
+          yarn set version 4.6.0
           yarn --version
 
-          # 5. تثبيت الحزم والمكتبات
+          # 4. Install dependencies using Yarn Berry
           yarn install
 
-          # 6. تجميع وبناء ملف الـ APK والـ AAB للأندرويد
+          # 5. Build Release APK and AAB bundles from the correct relative path
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
     artifacts:
-      - "**/build/outputs/apk/release/*.apk"
-      - "**/build/outputs/bundle/release/*.aab"
+      - coolvpn-pro-project/android/app/build/outputs/apk/release/*.apk
+      - coolvpn-pro-project/android/app/build/outputs/bundle/release/*.aab
