@@ -9,7 +9,7 @@ workflows:
         PACKAGE_NAME: "com.coolvpn.pro"
       node: v22.14.0
     scripts:
-      - name: Locate, Clean, Install via NPM and Build Android Release
+      - name: Locate, Clean, Install, Prebuild and Build Android Release
         script: |
           set -e
 
@@ -23,11 +23,10 @@ workflows:
             unzip -q "$ZIP_NAME"
           fi
 
-          # 3. العثور حصرياً على مجلد الموبايل الذي يحتوي على app.json (متخطياً api-server)
+          # 3. العثور حصرياً على مجلد الموبايل الذي يحتوي على app.json
           PROJECT_DIR=$(find . -name "app.json" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
           
           if [ -z "$PROJECT_DIR" ]; then
-            # كاحتياط، البحث عن مجلد يحتوي على مجلد فرعي اسمه android متخطياً api-server
             PROJECT_DIR=$(find . -type d -name "android" -not -path "*/node_modules/*" -not -path "*/api-server/*" -exec dirname {} \; | head -n 1)
           fi
 
@@ -75,14 +74,14 @@ workflows:
           # 6. التثبيت باستخدام NPM
           npm install --legacy-peer-deps
 
-          # 7. الدخول لمجلد android وبناء التطبيق بنجاح
-          if [ -d "android" ]; then
-            cd android
-          else
-            echo "Error: android directory not found in mobile project path!"
-            exit 1
+          # 7. التأكد من وجود مجلد android و ملف gradlew، وإذا لم يوجد يتم توليده عبر Expo Prebuild
+          if [ ! -f "android/gradlew" ]; then
+            echo "Gradle wrapper missing. Generating native android project via Expo Prebuild..."
+            npx expo prebuild --platform android --no-install
           fi
 
+          # 8. الدخول لمجلد android وبناء التطبيق
+          cd android
           echo "Building from path: $(pwd)"
           chmod +x gradlew
           ./gradlew assembleRelease bundleRelease
